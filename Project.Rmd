@@ -1,0 +1,414 @@
+---
+title: "Project"
+author: "Muhammad Mahad Khan"
+date: "2024-03-26"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(brms)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(broom)
+library(report)
+library(readr)
+library(tidymodels)
+library(stargazer)
+library(ggcorrplot)
+library(caret)
+library(jtools)
+library(foreign)
+library(glmnet)
+library(formatR)
+library(rstan)
+library(mlbench)
+library(ISLR2)
+library(ISLR)
+library(bayesplot)
+library(vcd)
+library(bayesplot)
+suppressWarnings(expr)
+
+```
+
+```{r}
+
+data_1 <- read.csv("avsurvey.csv")
+
+data_1 <- data_1 %>%
+  mutate(across(c("SharedCyclist", "SharedPedestrian", "ReportSafetyIncident" ,"BikePghMember", "AutoOwner"), ~ ifelse(. == "Yes", 1, 0)))
+
+
+data_1$AvImpact <- factor(data_1$AvImpact, 
+                          levels = c("Significantly Worse", "Slightly Worse", "No effect", "Slightly Better", "Significantly Better"),
+                          ordered = TRUE)
+
+data_1$SafeAv <- factor(data_1$SafeAv, 
+                          levels = c("1", "2", "3", "4", "5"),
+                          ordered = TRUE)
+
+data_1$SafeHuman <- factor(data_1$SafeHuman, 
+                          levels = c("1", "2", "3", "4", "5"),
+                          ordered = TRUE)
+
+data_1$ProvingGround <- factor(data_1$ProvingGround, 
+                          levels = c("Disapprove", "Somewhat Disapprove", "Neutral", "Somewhat Approve", "Approve"), ordered = TRUE)
+
+data_1$FamiliarityTech <- factor(data_1$FamiliarityTech, 
+                          levels = c("Not familiar at all", "Somewhat familiar", "Mostly familiar", "Extremely familiar"),
+                          ordered = TRUE)
+
+data_1$ArizonaCrash <- factor(data_1$ArizonaCrash)
+data_1$BikePghMember <- factor(data_1$BikePghMember)
+
+summary(data_1)
+
+```
+
+```{r}
+data_1 %>%
+  group_by(SafeAv, FamiliarityTech) %>%
+  summarise(count = n()) %>%
+  mutate(percent = count / sum(count) * 100) %>%
+  ggplot(aes(x = SafeAv, y = percent, fill = FamiliarityTech)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Stacked Bar Plot of SafeAv by FamiliarityTech",
+       x = "SafeAv",
+       y = "Percentage",
+       fill = "FamiliarityTech") +
+  theme_minimal()
+
+```
+
+```{r}
+data_1 %>%
+  group_by(SafeAv, AvImpact) %>%
+  summarise(count = n()) %>%
+  mutate(percent = count / sum(count) * 100) %>%
+  ggplot(aes(x = SafeAv, y = percent, fill = AvImpact)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Stacked Bar Plot of SafeAv by AvImpact",
+       x = "SafeAv",
+       y = "Percentage",
+       fill = "AvImpact") +
+  theme_minimal()
+
+
+```
+
+```{r}
+# Convert SafeAv to numeric if it's a factor
+data_1$SafeAv <- as.numeric(as.character(data_1$SafeAv))
+
+# Create a histogram
+ggplot(data_1, aes(x = SafeAv)) +
+  geom_histogram(binwidth = 1, fill = "skyblue", color = "black") +
+  labs(title = "Distribution of SafeAv",
+       x = "SafeAv",
+       y = "Frequency") +
+  theme_minimal()
+
+# Create a density plot
+ggplot(data_1, aes(x = SafeAv)) +
+  geom_density(fill = "skyblue", color = "black") +
+  labs(title = "Density Plot of SafeAv",
+       x = "SafeAv",
+       y = "Density") +
+  theme_minimal()
+
+
+```
+
+
+```{r}
+data_1 %>%
+  group_by(SafeAv, ArizonaCrash) %>%
+  summarise(count = n()) %>%
+  mutate(percent = count / sum(count) * 100) %>%
+  ggplot(aes(x = SafeAv, y = percent, fill = ArizonaCrash)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Stacked Bar Plot of SafeAv by ArizonaCrash",
+       x = "SafeAv",
+       y = "Percentage",
+       fill = "ArizonaCrash") +
+  theme_minimal()
+
+```
+
+
+```{r}
+data_1 %>%
+  group_by(SafeAv, ProvingGround) %>%
+  summarise(count = n()) %>%
+  mutate(percent = count / sum(count) * 100) %>%
+  ggplot(aes(x = SafeAv, y = percent, fill = ProvingGround)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Stacked Bar Plot of SafeAv by ProvingGround",
+       x = "SafeAv",
+       y = "Percentage",
+       fill = "ProvingGround") +
+  theme_minimal()
+```
+
+```{r}
+# Create a frequency table for SafeAv and calculate percentages
+data_summary_cyclist <- data_1 %>%
+  group_by(SafeAv) %>%
+  summarise(count = n()) %>%  # Count occurrences of each category
+  mutate(percentage = count / sum(count) * 100)  # Calculate percentages
+
+# Create the pie chart for SafeAv
+ggplot(data_summary_cyclist, aes(x = "", y = percentage, fill = SafeAv)) +  # Use percentages and fill by SharedCyclist categories
+  geom_bar(stat = "identity", width = 1, color = "white") +
+  coord_polar("y", start = 0) +
+  labs(title = "SafeAvt Distribution",
+       fill = "SafeAv",
+       y = "Percentage") +  # Add a title, legend title, and y-axis label
+  geom_text(aes(label = paste0(round(percentage), "%")), position = position_stack(vjust = 0.5)) +  # Add percentage labels
+  theme_minimal()
+```
+
+
+
+```{r}
+
+# Create a frequency table for SharedCyclist and calculate percentages
+data_summary_cyclist <- data_1 %>%
+  group_by(SharedCyclist) %>%
+  summarise(count = n()) %>%  # Count occurrences of each category
+  mutate(percentage = count / sum(count) * 100)  # Calculate percentages
+
+#Pie chart for SharedCyclist
+ggplot(data_summary_cyclist, aes(x = "", y = percentage, fill = SharedCyclist)) +  # Use percentages and fill by SharedCyclist categories
+  geom_bar(stat = "identity", width = 1, color = "white") +
+  coord_polar("y", start = 0) +
+  labs(title = "Shared Cyclist Distribution",
+       fill = "Shared Cyclist",
+       y = "Percentage") +  
+  geom_text(aes(label = paste0(round(percentage), "%")), position = position_stack(vjust = 0.5)) +  # Add percentage labels
+  theme_minimal()
+
+
+
+```
+
+```{r}
+# Frequency table for SharedPedestrian and calculate percentages
+data_summary_pedestrian <- data_1 %>%
+  group_by(SharedPedestrian) %>%
+  summarise(count = n()) %>%  # Count occurrences of each category
+  mutate(percentage = count / sum(count) * 100)  # Calculate percentages
+
+# Pie chart for SharedPedestrian
+ggplot(data_summary_pedestrian, aes(x = "", y = percentage, fill = SharedPedestrian)) +  # Use percentages and fill by SharedPedestrian categories
+  geom_bar(stat = "identity", width = 1, color = "white") +
+  coord_polar("y", start = 0) +
+  labs(title = "Shared Pedestrian Distribution",
+       fill = "Shared Pedestrian",
+       y = "Percentage") +  # Add a title, legend title, and y-axis label
+  geom_text(aes(label = paste0(round(percentage), "%")), position = position_stack(vjust = 0.5)) +  # Add percentage labels
+  theme_minimal()
+
+
+```
+
+```{r}
+
+# Frequency table for ReportSafetyIncident and calculate percentages
+data_summary_safety <- data_1 %>%
+  group_by(ReportSafetyIncident) %>%
+  summarise(count = n()) %>%  # Count occurrences of each category
+  mutate(percentage = count / sum(count) * 100)  # Calculate percentages
+
+#Pie chart for ReportSafetyIncident
+ggplot(data_summary_safety, aes(x = "", y = percentage, fill = ReportSafetyIncident)) +  
+  geom_bar(stat = "identity", width = 1, color = "white") +
+  coord_polar("y", start = 0) +
+  labs(title = "Report Safety Incident Distribution",
+       fill = "Report Safety Incident",
+       y = "Percentage") +  
+  geom_text(aes(label = paste0(round(percentage), "%")), position = position_stack(vjust = 0.5)) +  # Add percentage labels
+  theme_minimal()
+
+
+```
+
+```{r}
+
+#Frequency table for ArizonaCrash and calculate percentages
+data_summary_arizona <- data_1 %>%
+  group_by(ArizonaCrash) %>%
+  summarise(count = n()) %>%  # Count occurrences of each category
+  mutate(percentage = count / sum(count) * 100)  # Calculate percentages
+
+#Pie chart for ArizonaCrash
+ggplot(data_summary_arizona, aes(x = "", y = percentage, fill = ArizonaCrash)) +  # Use percentages and fill by ArizonaCrash categories
+  geom_bar(stat = "identity", width = 1, color = "white") +
+  coord_polar("y", start = 0) +
+  labs(title = "Arizona Crash Opinion Distribution",
+       fill = "Arizona Crash Opinion",
+       y = "Percentage") +  
+  geom_text(aes(label = paste0(round(percentage), "%")), position = position_stack(vjust = 0.5)) +  
+  theme_minimal()
+
+
+```
+
+
+```{r}
+
+# Create a subset of data with relevant ordinal variables
+ordinal_data <- data_1[, c("FamiliarityTech", "SafeAv", "AvImpact")]
+
+# Function to convert ordinal variables to numeric for visualization
+convert_to_numeric <- function(var) {
+  var <- as.numeric(factor(var, ordered = TRUE))
+  return(var)
+}
+
+# Apply the function to convert ordinal variables to numeric
+ordinal_data <- lapply(ordinal_data, convert_to_numeric)
+ordinal_data <- as.data.frame(ordinal_data)
+
+# Create a heatmap
+heatmap_plot <- ggplot(data = ordinal_data, aes(x = FamiliarityTech, y = AvImpact)) +
+  geom_tile(aes(fill = SafeAv), color = "white") +
+  scale_fill_gradient(low = "red", high = "blue") +
+  labs(title = "Heatmap of Ordinal Variables",
+       x = "Familiarity with Technology",
+       y = "Perceived Impact of AVs",
+       fill = "SafeAv") +
+  theme_minimal()
+
+# Print the heatmap
+print(heatmap_plot)
+
+```
+
+```{r}
+interaction_heatmap <- table(data_1$FamiliarityTech, data_1$SafeAv)
+ggplot(data = as.data.frame(interaction_heatmap), aes(Var1, Var2, fill = Freq)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient(low = "white", high = "red") +
+  labs(title = "Interaction Heatmap", x = "Familiarity with Technology", y = "Safe AV") +
+  theme_minimal()
+```
+
+
+```{r}
+
+chi_square_test_1 <- chisq.test(table(data_1$SafeAv, data_1$FamiliarityTech))
+
+print(chi_square_test_1)
+
+chi_square_test_3 <- chisq.test(table(data_1$SharedCyclist, data_1$SharedPedestrian))
+
+print(chi_square_test_3)
+
+chi_square_test_5 <- chisq.test(table(data_1$SharedCyclist, data_1$SafeAv))
+
+print(chi_square_test_5)
+
+chi_square_test_6 <- chisq.test(table(data_1$SharedPedestrian, data_1$SafeAv))
+
+print(chi_square_test_6)
+
+```
+
+```{r}
+str(data_1)
+```
+
+
+```{r}
+
+#model_a <- brm(SafeAv ~ FamiliarityTech,
+ #              data = data_1,
+  #             family = cumulative(), chains = 4, core = 4, iter = 8000)
+#summary(model_a)
+
+
+loaded_model_a <- readRDS("model_a.rds")
+summary(loaded_model_a)
+
+```
+
+
+```{r}
+plot(loaded_model_a)
+
+```
+
+
+
+```{r}
+
+#model_b <- brm(SafeAv ~ FamiliarityTech + AvImpact,
+ #              data = data_1,
+  #             family = cumulative(), chains = 4, core = 4, iter = 8000)
+
+#summary(model_b)
+
+loaded_model_b <- readRDS("model_b.rds")
+summary(loaded_model_b)
+
+```
+
+
+
+```{r}
+
+#model_c <- brm(SafeAv ~ FamiliarityTech + SharedCyclist * SharedPedestrian,
+               #data = data_1,
+               #family = cumulative(), chains = 4, core = 4, iter = 8000)
+
+#summary(model_c)
+
+loaded_model_c <- readRDS("model_c.rds")
+summary(loaded_model_c)
+
+loo_inter_1 <- loo(loaded_model_c)
+print(loo_inter_1)
+
+```
+```{r}
+#loo_inter_a <- loo(loaded_model_a)
+#loo_inter_b <- loo(loaded_model_b)
+print(loo_inter_a)
+print(loo_inter_b)
+
+
+```
+
+
+```{r}
+
+model_d <- brm(SafeAv ~ FamiliarityTech + AvImpact + ArizonaCrash,
+               data = data_1,
+               family = cumulative(), chains = 4, core = 4, iter = 8000)
+
+saveRDS(model_d, file = "model_d.rds")
+
+loaded_model_d <- readRDS("model_d.rds")
+summary(loaded_model_d)
+
+str(data_1)
+```
+```{r}
+model_e <- brm(SafeAv ~ FamiliarityTech,
+               data = data_1,
+               family = cumulative(), chains = 4, core = 4, iter = 8000, 
+               prior = c(
+                 prior(normal(1, 0.5), class = "Intercept"),
+                 prior(normal(0, 0.5), class = "b")
+               ))
+summary(model_e)
+
+```
+
+
